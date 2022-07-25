@@ -10,6 +10,7 @@ import {
   Delete,
   Query,
   ValidationPipe,
+  ConflictException
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -22,6 +23,20 @@ import {
 } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 
+import {
+  validate,
+  validateOrReject,
+  Contains,
+  IsInt,
+  Length,
+  IsEmail,
+  IsFQDN,
+  IsDate,
+  Min,
+  Max,
+} from 'class-validator';
+
+
 import { DeviceGroupService } from './device-group.service';
 import {
   AddGroupDTO,
@@ -31,20 +46,42 @@ import {
   UnreservedDeviceGroupsFilterDTO,
   UpdateDeviceGroupDTO,
   ReserveGroupsDTO,
+  CSVBulkUploadDTO,
+  JobFailedRowsDTO,
 } from './dto';
 import { Roles } from '../user/decorators/roles.decorator';
-import { Role } from '../../utils/enums';
+import { Installation, OffTaker, Role, Sector, StandardCompliance } from '../../utils/enums';
 import { RolesGuard } from '../../guards/RolesGuard';
 import { UserDecorator } from '../user/decorators/user.decorator';
-import { ILoggedInUser } from '../../models';
+import { DeviceDescription, ILoggedInUser } from '../../models';
 import { NewDeviceDTO } from '../device/dto';
+import { File, FileService } from '../file';
+
+import { parse } from 'csv-parse';
+import * as fs from 'fs';
+import { Readable } from 'stream';
+
+
+
+import csv from 'csv-parser';
+import { DeviceCsvFileProcessingJobsEntity, StatusCSV } from './device_csv_processing_jobs.entity';
+import { Permission } from '../permission/decorators/permission.decorator';
+import { ACLModules } from '../access-control-layer-module-service/decorator/aclModule.decorator';
+import { PermissionGuard } from '../../guards';
+
+
 
 @ApiTags('device-group')
 @ApiBearerAuth('access-token')
 @ApiSecurity('drec')
 @Controller('/device-group')
 export class DeviceGroupController {
-  constructor(private readonly deviceGroupService: DeviceGroupService) {}
+  csvParser = csv({ separator: ',' });
+
+  parser = parse({
+    delimiter: ','
+  });
+  constructor(private readonly deviceGroupService: DeviceGroupService, private readonly fileService:FileService) {}
 
   @Get()
   @ApiOkResponse({
@@ -211,6 +248,55 @@ export class DeviceGroupController {
     );
   }
 
+
+  
+
+    @Post('process-creation-bulk-devices-csv')
+    @UseGuards(AuthGuard('jwt'),PermissionGuard)
+    @Permission('Write')
+    @ACLModules('DEVICE_BULK_MANAGEMENT_CRUDL')
+    //@Roles(Role.Admin, Role.DeviceOwner,Role.OrganizationAdmin)
+    @ApiResponse({
+      status: HttpStatus.OK,
+      type: [DeviceCsvFileProcessingJobsEntity],
+      description: 'Returns created devices from csv',
+    })
+    @ApiBody({ type: CSVBulkUploadDTO})
+    public async processCreationBulkFromCSV(@UserDecorator() user: ILoggedInUser,@UserDecorator() { organizationId }: ILoggedInUser,  @Body() fileToProcess: CSVBulkUploadDTO): Promise<DeviceCsvFileProcessingJobsEntity> {
+      if(user.organizationId ===null || user.organizationId === undefined)
+      {
+        throw new ConflictException({
+          success: false,
+          message:
+            'User needs to have organization added' 
+        })
+      }
+      let response =  await this.fileService.get(fileToProcess.fileName,user);
+      if(response == undefined)
+      {
+        //throw new Error("file not found");
+        throw new ConflictException({
+          success: false,
+          message:
+            'File Not Found' 
+        })
+
+      }
+      if(!response.filename.endsWith('.csv'))
+      {
+        //throw new Error("file not found");
+        throw new ConflictException({
+          success: false,
+          message:
+            'Invalid file' 
+        })
+
+      }
+      let jobCreated=await this.deviceGroupService.createCSVJobForFile(user.id,organizationId,StatusCSV.Added,response instanceof File? response.id:'');
+      
+      return jobCreated;
+    }
+
   @Post('/add/:id')
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(Role.Admin)
@@ -285,5 +371,55 @@ export class DeviceGroupController {
     @UserDecorator() { organizationId }: ILoggedInUser,
   ): Promise<void> {
     return await this.deviceGroupService.remove(id, organizationId);
+  }
+
+  @Get('/bulk-upload-status/:id')
+  @UseGuards(AuthGuard('jwt'),PermissionGuard)
+  //@UseGuards(AuthGuard('jwt'))
+   @Permission('Read')
+   @ACLModules('DEVICE_BULK_MANAGEMENT_CRUDL')
+  @ApiResponse({
+    status: HttpStatus.OK,
+    type: JobFailedRowsDTO,
+    description: 'Returns status of job id for bulk upload',
+  })
+  public async getBulkUploadJobStatus(
+    @Param('id') jobId: number,
+    @UserDecorator() { organizationId }: ILoggedInUser
+  ): Promise<JobFailedRowsDTO | undefined> {
+    console.log("jobId",jobId);
+
+    let data = await this.deviceGroupService.getFailedRowDetailsForCSVJob(
+      jobId
+    );
+    console.log("data",data);
+    return await this.deviceGroupService.getFailedRowDetailsForCSVJob(
+      jobId
+    );
+  }
+
+  @Get('/bulk-upload/get-all-csv-jobs-of-organization')
+  @UseGuards(AuthGuard('jwt'))
+  //@UseGuards(AuthGuard('jwt'),PermissionGuard)
+  //@Permission('Read')
+  //@ACLModules('DEVICE_BULK_MANAGEMENT_CRUDL')
+  @ApiResponse({
+    status: HttpStatus.OK,
+    type: [DeviceCsvFileProcessingJobsEntity],
+    description: 'Returns created jobs of an organization',
+  })
+  public async getAllCsvJobsBelongingToOrganization(@UserDecorator() user: ILoggedInUser,@UserDecorator() { organizationId }: ILoggedInUser): Promise<Array<DeviceCsvFileProcessingJobsEntity>> {
+    console.log("user",user);
+    console.log("organization",organizationId);
+    
+    if(user.organizationId ===null || user.organizationId === undefined)
+    {
+      throw new ConflictException({
+        success: false,
+        message:
+          'User needs to have organization added' 
+      })
+    }
+    return this.deviceGroupService.getAllCSVJobsForOrganization(organizationId);
   }
 }

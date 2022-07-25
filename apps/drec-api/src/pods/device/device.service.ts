@@ -6,7 +6,7 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { FindOneOptions, Repository } from 'typeorm';
+import { FindOneOptions, Repository, In } from 'typeorm';
 import { Device } from './device.entity';
 import { NewDeviceDTO } from './dto/new-device.dto';
 import { defaults } from 'lodash';
@@ -58,11 +58,21 @@ export class DeviceService {
   }
 
   async getOrganizationDevices(organizationId: number): Promise<Device[]> {
+    console.log(organizationId);
     const devices = await this.repository.find({
       where: { organizationId },
     });
 
     return devices;
+  }
+
+  public async findForDevicesWithDeviceIdAndOrganizationId(
+    deviceIds: Array<number>,
+    organizationId: number,
+  ): Promise<Device[]> {
+    return this.repository.find({
+      where: { id: In(deviceIds), organizationId },
+    });
   }
 
   public async findForGroup(groupId: number): Promise<Device[]> {
@@ -92,6 +102,17 @@ export class DeviceService {
     );
   }
 
+  async findMultipleDevicesBasedExternalId(
+    meterIdList: Array<string>,
+  ): Promise<Array<DeviceDTO | null>> {
+    console.log("meterIdList",meterIdList);
+    return (
+      (await this.repository.find({
+        where: { externalId: In(meterIdList) },
+      })) ?? null
+    );
+  }
+
   public async seed(
     orgCode: number,
     newDevice: NewDeviceDTO,
@@ -108,6 +129,7 @@ export class DeviceService {
     orgCode: number,
     newDevice: NewDeviceDTO,
   ): Promise<Device> {
+    console.log(orgCode);
     return await this.repository.save({
       ...newDevice,
       organizationId: orgCode,
@@ -180,6 +202,7 @@ export class DeviceService {
               const deviceKey: DeviceKey = DeviceSortPropertyMapper[
                 order
               ] as DeviceKey;
+              //@ts-ignore
               return item[deviceKey];
             }
           }),
@@ -225,6 +248,7 @@ export class DeviceService {
       if (deviceKey === 'deviceTypeCode') {
         return getDeviceTypeFromCode(devices[0][deviceKey]);
       }
+      //@ts-ignore
       return devices[0][deviceKey];
     })}`;
     return name;
@@ -234,13 +258,13 @@ export class DeviceService {
     const where: FindConditions<Device> = cleanDeep({
       fuelCode: filter.fuelCode,
       deviceTypeCode: filter.deviceTypeCode,
-      installationConfiguration: filter.installationConfiguration,
+      //installationConfiguration: filter.installationConfiguration,
       capacity: filter.capacity,
       gridInterconnection: filter.gridInterconnection,
       offTaker: filter.offTaker,
-      sector: filter.sector,
+      //sector: filter.sector,
       labels: filter.labels,
-      standardCompliance: filter.standardCompliance,
+      //standardCompliance: filter.standardCompliance,
       countryCode: filter.country && getCodeFromCountry(filter.country),
       commissioningDate:
         filter.start_date &&
