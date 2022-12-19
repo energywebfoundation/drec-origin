@@ -351,6 +351,16 @@ export class DeviceController {
         );
       });
     }
+    if (new Date(deviceToUpdate.commissioningDate).getTime() > new Date().getTime()) {
+      return new Promise((resolve, reject) => {
+        reject(
+          new ConflictException({
+            success: false,
+            message: ` Invalid commissioning date, commissioning is greater than current date`,
+          })
+        );
+      });
+    }
     return await this.deviceService.update(
       user.organizationId,
       user.role,
