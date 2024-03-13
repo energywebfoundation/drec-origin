@@ -1,3 +1,20 @@
+# ⚠️ IMPORTANT NOTE
+
+This repository is **deprecated**.
+Work on the D-REC platform is continued [here](https://github.com/d-rec/drec-origin).
+
+**Background:**
+
+With the creation of the D-REC Initiative, a dedicated Github organisation was created <https://github.com/d-rec>.
+The D-REC platform was forked and development continued under the new organisation.
+
+**Further information:**
+
+- <https://drecs.org/>
+- <https://enaccess.org/materials/drec/>
+
+---
+
 <h1 align="center">
   <br>
   <a href="https://www.energyweb.org/"><img src="https://www.energyweb.org/wp-content/uploads/2019/04/logo-brand.png" alt="EnergyWeb" width="150"></a>
