@@ -1,6 +1,6 @@
 # ⚠️ IMPORTANT NOTE
 
-This is repository is **deprecated**.
+This repository is **deprecated**.
 Work on the D-REC platform is continued [here](https://github.com/d-rec/drec-origin).
 
 **Background:**
